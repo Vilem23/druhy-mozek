@@ -8,6 +8,7 @@ const DEFAULTS = { key: '', model: 'gemini-flash-latest', projects: [], ideas: [
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const ic = (name, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 function load() {
   try {
@@ -140,7 +141,7 @@ async function submit(blob) {
   if (blob) audioStore.set(idea.id, blob);
   draft = ''; localStorage.removeItem(LS_DRAFT);
   save(); render();
-  toast('Uloženo ✓');
+  toast('Uloženo');
   await enrich(idea.id);
 }
 
@@ -170,11 +171,11 @@ async function toggleRec() {
     toast('Mikrofon není povolený (Nastavení iPhonu → Safari / Nápady → Mikrofon).');
   }
 }
+const micInner = () => recording ? ic('stop', 'fill') + 'Zastavit' : ic('mic') + 'Nahrát hlas';
 function updateRecUI() {
   const b = $('#mic'); if (!b) return;
   b.classList.toggle('rec', recording);
-  b.textContent = recording ? '⏹' : '🎙';
-  const h = $('#micHint'); if (h) h.textContent = recording ? 'Nahrávám… klepněte pro odeslání' : 'Klepněte a mluvte';
+  b.innerHTML = micInner();
 }
 
 /* ========== Vykreslování ========== */
@@ -183,24 +184,34 @@ const projName = id => (S.projects.find(p => p.id === id) || {}).name || '';
 
 function ideaCard(i) {
   const name = projName(i.projectId);
-  const status = {
-    transcribing: '⏳ Přepisuji a třídím…',
-    pending: '⏳ Třídím…',
-    nokey: 'ℹ️ Uloženo bez AI (chybí API klíč v Nastavení).',
-    error: '⚠️ AI se nepovedla, ale nápad je uložený. ' + esc(i.err || '')
-  }[i.status] || '';
+  const st = {
+    transcribing: ['loader', 'Přepisuji a třídím…', '', 'spin'],
+    pending: ['loader', 'Třídím…', '', 'spin'],
+    nokey: ['info', 'Uloženo bez AI (chybí API klíč v Nastavení).', '', ''],
+    error: ['alert', 'AI se nepovedla, ale nápad je uložený. ' + esc(i.err || ''), 'warn', '']
+  }[i.status];
+  const status = st ? `<div class="status ${st[2]}">${ic(st[0], st[3])}<span>${st[1]}</span></div>` : '';
   const text = i.text ? esc(i.text) : '<i class="small">(nahrávka zatím není přepsaná)</i>';
   const opts = ['<option value="">Nezařazeno</option>']
     .concat(S.projects.map(p => `<option value="${p.id}" ${p.id === i.projectId ? 'selected' : ''}>${esc(p.name)}</option>`)).join('');
+  const canRetry = (i.status === 'error' || i.status === 'nokey') && S.key;
+  const mk = i.suggest && !i.projectId;
   return `<div class="card">
+    <div class="card-top">
+      ${name ? `<span class="tag">${esc(name)}</span>` : '<span class="tag none">Nezařazeno</span>'}
+      <span class="date">${fmt(i.created)}</span>
+    </div>
     <div class="txt">${text}</div>
-    ${i.summary && i.summary !== i.text ? `<div class="meta">💡 ${esc(i.summary)}</div>` : ''}
-    <div class="meta">${name ? `<span class="tag">${esc(name)}</span>` : '<span class="tag none">Nezařazeno</span>'} ${fmt(i.created)}</div>
-    ${status ? `<div class="status">${status}</div>` : ''}
-    ${i.suggest && !i.projectId ? `<button class="btn small ghost" data-act="mkproj" data-id="${i.id}">➕ Založit projekt „${esc(i.suggest)}“</button>` : ''}
-    ${(i.status === 'error' || i.status === 'nokey') && S.key ? `<button class="btn small ghost" data-act="retry" data-id="${i.id}">🔄 Zkusit znovu</button>` : ''}
-    <div style="margin-top:8px"><select data-act="mv" data-id="${i.id}">${opts}</select></div>
-    <button class="btn small ghost danger" data-act="del" data-id="${i.id}">Smazat</button>
+    ${i.summary && i.summary !== i.text ? `<div class="summary">${ic('sparkles')}<span>${esc(i.summary)}</span></div>` : ''}
+    ${status}
+    ${mk || canRetry ? `<div class="actions">
+      ${mk ? `<button class="btn small soft" data-act="mkproj" data-id="${i.id}">${ic('plus')}Založit projekt „${esc(i.suggest)}“</button>` : ''}
+      ${canRetry ? `<button class="btn small ghost" data-act="retry" data-id="${i.id}">${ic('retry')}Zkusit znovu</button>` : ''}
+    </div>` : ''}
+    <div class="card-foot">
+      <select data-act="mv" data-id="${i.id}" aria-label="Projekt">${opts}</select>
+      <button class="icon-btn" data-act="del" data-id="${i.id}" aria-label="Smazat">${ic('trash')}</button>
+    </div>
   </div>`;
 }
 
@@ -208,10 +219,13 @@ const views = {
   write() {
     const recent = S.ideas.slice(0, 6).map(ideaCard).join('');
     return `<h1>Nový nápad</h1>
-      <textarea id="draft" placeholder="Napište, co vás napadlo…" enterkeyhint="done">${esc(draft)}</textarea>
-      <button class="btn" data-act="save">Uložit nápad</button>
-      <button class="mic ${recording ? 'rec' : ''}" id="mic" data-act="mic" aria-label="Nahrát hlas">${recording ? '⏹' : '🎙'}</button>
-      <p class="hint" id="micHint">${recording ? 'Nahrávám… klepněte pro odeslání' : 'Klepněte a mluvte'}</p>
+      <div class="composer">
+        <textarea id="draft" placeholder="Co vás napadlo?" enterkeyhint="done">${esc(draft)}</textarea>
+        <div class="composer-bar">
+          <button class="btn ghost mic ${recording ? 'rec' : ''}" id="mic" data-act="mic" aria-label="Nahrát hlas">${micInner()}</button>
+          <button class="btn" data-act="save">Uložit${ic('send')}</button>
+        </div>
+      </div>
       ${recent ? '<h2>Naposledy</h2>' + recent : ''}`;
   },
 
@@ -221,14 +235,16 @@ const views = {
       const items = S.ideas.filter(i => i.projectId === p.id);
       const last = items[0];
       return `<button class="proj" data-act="openproj" data-id="${p.id}">
-        <div class="row"><b>${esc(p.name)}</b><span class="badge">${items.length}</span></div>
-        ${last ? `<div class="meta">${esc((last.summary || last.text).slice(0, 110))}</div>` : '<div class="meta">Zatím bez nápadů</div>'}
+        <div class="body">
+          <div class="row"><b>${esc(p.name)}</b><span class="badge">${items.length}</span></div>
+          <div class="meta">${last ? esc((last.summary || last.text).slice(0, 110)) : 'Zatím bez nápadů'}</div>
+        </div>${ic('right')}
       </button>`;
     }).join('');
     return `<h1>Projekty</h1>
-      ${list || '<p class="small">Zatím žádné projekty. Založte první – AI pak bude nápady řadit sama.</p>'}
-      ${unsorted.length ? `<button class="proj" data-act="openproj" data-id=""><div class="row"><b>Nezařazeno</b><span class="badge">${unsorted.length}</span></div></button>` : ''}
-      <button class="btn" data-act="newproj">➕ Nový projekt</button>`;
+      ${list || `<div class="empty">${ic('folder')}<p>Zatím žádné projekty.<br>Založte první, AI pak bude nápady řadit sama.</p></div>`}
+      ${unsorted.length ? `<button class="proj" data-act="openproj" data-id=""><div class="body"><div class="row"><b>Nezařazeno</b><span class="badge">${unsorted.length}</span></div></div>${ic('right')}</button>` : ''}
+      <button class="btn" data-act="newproj">${ic('plus')}Nový projekt</button>`;
   },
 
   project() {
@@ -237,40 +253,49 @@ const views = {
     if (!isNone && !p) { view = 'projects'; return views.projects(); }
     const items = S.ideas.filter(i => isNone ? !S.projects.some(x => x.id === i.projectId) : i.projectId === curProject);
     const ans = projAnswers[curProject];
-    return `<button class="back" data-act="back">‹ Projekty</button>
+    const busy = busyProj[curProject];
+    return `<button class="back" data-act="back">${ic('left')}Projekty</button>
       <h1>${isNone ? 'Nezařazeno' : esc(p.name)}</h1>
-      ${!isNone && p.desc ? `<p class="small">${esc(p.desc)}</p>` : ''}
-      ${!isNone ? `<button class="btn" data-act="where" ${busyProj[curProject] ? 'disabled' : ''}>${busyProj[curProject] ? '⏳ Čtu zápisky…' : '🧭 Kde jsem skončil?'}</button>` : ''}
-      ${ans ? `<div class="answer">${esc(ans)}</div>` : ''}
-      <h2>Nápady (${items.length})</h2>
+      ${!isNone && p.desc ? `<p class="small" style="margin-top:-8px">${esc(p.desc)}</p>` : ''}
+      ${!isNone ? `<button class="btn" data-act="where" ${busy ? 'disabled' : ''}>${busy ? ic('loader', 'spin') + 'Čtu zápisky…' : ic('compass') + 'Kde jsem skončil?'}</button>` : ''}
+      ${ans ? `<div class="answer">${ic('sparkles')}<div>${esc(ans)}</div></div>` : ''}
+      <h2>Nápady · ${items.length}</h2>
       ${items.map(ideaCard).join('') || '<p class="small">Nic tu zatím není.</p>'}
-      ${!isNone ? `<button class="btn ghost small" data-act="editproj">Upravit název a popis</button>
-      <button class="btn ghost small danger" data-act="delproj">Smazat projekt</button>` : ''}`;
+      ${!isNone ? `<div class="actions" style="margin-top:14px">
+        <button class="btn ghost small" data-act="editproj">${ic('edit')}Upravit</button>
+        <button class="btn ghost small danger" data-act="delproj">${ic('trash')}Smazat projekt</button>
+      </div>` : ''}`;
   },
 
   ask() {
     return `<h1>Zeptat se</h1>
       <p class="small">Zeptejte se na cokoli ze svých zápisků, např. „Co jsem vymýšlel k eshopu?“ nebo „Jaké nápady jsem měl minulý týden?“</p>
-      <textarea id="askq" placeholder="Vaše otázka…" style="min-height:90px">${esc(ask.q)}</textarea>
-      <button class="btn" data-act="doask" ${ask.busy ? 'disabled' : ''}>${ask.busy ? '⏳ Přemýšlím…' : 'Zeptat se'}</button>
-      ${ask.a ? `<div class="answer">${esc(ask.a)}</div>` : ''}`;
+      <div class="composer">
+        <textarea id="askq" placeholder="Vaše otázka…" style="min-height:90px">${esc(ask.q)}</textarea>
+      </div>
+      <button class="btn" data-act="doask" ${ask.busy ? 'disabled' : ''}>${ask.busy ? ic('loader', 'spin') + 'Přemýšlím…' : ic('sparkles') + 'Zeptat se'}</button>
+      ${ask.a ? `<div class="answer">${ic('sparkles')}<div>${esc(ask.a)}</div></div>` : ''}`;
   },
 
   settings() {
     return `<h1>Nastavení</h1>
-      <label for="key">Gemini API klíč</label>
-      <input id="key" type="password" autocomplete="off" placeholder="AIza…" value="${esc(S.key)}">
-      <small>Zdarma z <b>aistudio.google.com/apikey</b>. Klíč zůstává jen v tomto telefonu.</small>
-      <label for="model">Model</label>
-      <input id="model" type="text" autocapitalize="off" autocorrect="off" value="${esc(S.model)}">
-      <small>Výchozí „gemini-flash-latest“ je rychlý a levný. Při chybě modelu zkuste jiný z AI Studia.</small>
-      <button class="btn" data-act="savesettings">Uložit nastavení</button>
+      <div class="group">
+        <label for="key">Gemini API klíč</label>
+        <input id="key" type="password" autocomplete="off" placeholder="AIza…" value="${esc(S.key)}">
+        <small>Zdarma z <b>aistudio.google.com/apikey</b>. Klíč zůstává jen v tomto telefonu.</small>
+        <label for="model">Model</label>
+        <input id="model" type="text" autocapitalize="off" autocorrect="off" value="${esc(S.model)}">
+        <small>Výchozí „gemini-flash-latest“ je rychlý a levný. Při chybě modelu zkuste jiný z AI Studia.</small>
+        <button class="btn" data-act="savesettings">${ic('check')}Uložit nastavení</button>
+      </div>
       <h2>Záloha</h2>
-      <small>Data jsou jen v telefonu. Občas je zálohujte.</small>
-      <button class="btn ghost" data-act="export">⬇️ Exportovat zálohu</button>
-      <button class="btn ghost" data-act="import">⬆️ Obnovit ze zálohy</button>
-      <input id="file" type="file" accept="application/json,.json" hidden>
-      <p class="small">Nápadů: ${S.ideas.length} · Projektů: ${S.projects.length}</p>`;
+      <div class="group">
+        <small>Data jsou jen v telefonu. Občas je zálohujte.</small>
+        <button class="btn ghost" data-act="export">${ic('download')}Exportovat zálohu</button>
+        <button class="btn ghost" data-act="import">${ic('upload')}Obnovit ze zálohy</button>
+        <input id="file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p class="stats"><span>Nápadů: ${S.ideas.length}</span><span>·</span><span>Projektů: ${S.projects.length}</span></p>`;
   }
 };
 
@@ -340,7 +365,7 @@ const actions = {
         system: 'Pomáháš člověku s krátkou pamětí. Z jeho zápisků v projektu stručně česky shrň: 1) co k projektu řešil, 2) kde skončil, 3) co by mohl udělat dál. Piš jednoduše, krátce, maximálně 6 vět. Nic si nevymýšlej.',
         parts: [{ text: `Projekt: ${p.name}\n${p.desc || ''}\n\nZápisky (od nejnovějšího):\n` + items.slice(0, 80).map(i => `[${fmt(i.created)}] ${i.text.slice(0, 500)}`).join('\n') }]
       });
-    } catch (e) { projAnswers[p.id] = '⚠️ ' + e.message; }
+    } catch (e) { projAnswers[p.id] = 'Chyba: ' + e.message; }
     busyProj[p.id] = false; render();
   },
 
@@ -356,14 +381,14 @@ const actions = {
         system: 'Odpovídáš česky, stručně a jednoduše (člověk má krátkou paměť). Vycházej pouze z poskytnutých zápisků. Pokud odpověď v zápiscích není, řekni to. Dnes je ' + new Date().toLocaleDateString('cs-CZ') + '.',
         parts: [{ text: `Zápisky (od nejnovějšího):\n${notes}\n\nOtázka: ${ask.q}` }]
       });
-    } catch (e) { ask.a = '⚠️ ' + e.message; }
+    } catch (e) { ask.a = 'Chyba: ' + e.message; }
     ask.busy = false; render();
   },
 
   savesettings() {
     S.key = ($('#key').value || '').trim();
     S.model = ($('#model').value || '').trim() || DEFAULTS.model;
-    save(); toast('Nastavení uloženo ✓');
+    save(); toast('Nastavení uloženo');
     // Nápady uložené bez AI se zpracují teď.
     S.ideas.filter(i => i.status === 'nokey').forEach(i => enrich(i.id));
   },
@@ -406,7 +431,7 @@ document.addEventListener('change', e => {
         const d = JSON.parse(t);
         if (!Array.isArray(d.ideas) || !Array.isArray(d.projects)) throw new Error();
         if (!confirm(`Obnovit ze zálohy (${d.ideas.length} nápadů, ${d.projects.length} projektů)? Současná data budou nahrazena.`)) return;
-        S.ideas = d.ideas; S.projects = d.projects; save(); render(); toast('Obnoveno ✓');
+        S.ideas = d.ideas; S.projects = d.projects; save(); render(); toast('Obnoveno');
       } catch (err) { toast('Soubor zálohy není platný.'); }
     });
   }

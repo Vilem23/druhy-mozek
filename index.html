@@ -7,94 +7,188 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Nápady">
-<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#151618" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <title>Nápady</title>
 <style>
 :root{
-  --bg:#f6f5f1; --card:#fff; --ink:#1d1f22; --muted:#6b6f76; --line:#e3e1da;
-  --accent:#2f6fed; --accent-ink:#fff; --rec:#e5484d; --ok:#2e9e5b; --warn:#b7791f;
+  --bg:#f7f7f8; --card:#fff; --ink:#0f1115; --muted:#6b7280; --line:#e9e9ed;
+  --accent:#4f46e5; --accent-ink:#fff; --accent-soft:#eeedfd;
+  --rec:#e5484d; --ok:#16a34a; --warn:#b45309; --warn-soft:#fef3e2;
+  --shadow:0 1px 2px rgba(15,17,21,.04),0 4px 14px rgba(15,17,21,.04);
+  --nav-bg:rgba(255,255,255,.82);
 }
 @media (prefers-color-scheme: dark){
-  :root{ --bg:#151618; --card:#202225; --ink:#f0f0ee; --muted:#9a9ea5; --line:#303338; --accent:#5b8cff; }
+  :root{
+    --bg:#0b0b0d; --card:#151518; --ink:#f4f4f5; --muted:#9a9aa3; --line:#26262b;
+    --accent:#7c78f5; --accent-soft:#1e1d3a; --warn:#f5b45c; --warn-soft:#2a2112;
+    --shadow:none; --nav-bg:rgba(21,21,24,.82);
+  }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
 body{
   background:var(--bg);color:var(--ink);
-  font:18px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  font:17px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
   display:flex;flex-direction:column;
   padding-top:env(safe-area-inset-top);
 }
-#main{flex:1;overflow-y:auto;padding:16px 16px 24px;-webkit-overflow-scrolling:touch}
-h1{font-size:26px;margin:4px 0 14px}
-h2{font-size:20px;margin:22px 0 10px}
+#main{flex:1;overflow-y:auto;padding:20px 18px 28px;-webkit-overflow-scrolling:touch}
+
+/* ikony */
+.ic{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.fill{fill:currentColor}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+h1{font-size:32px;line-height:1.15;font-weight:700;letter-spacing:-.025em;margin:4px 0 18px}
+h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:28px 0 10px}
+p{margin:0 0 12px}
+
+/* spodní navigace */
 nav{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:0;
-  background:var(--card);border-top:1px solid var(--line);
-  padding-bottom:env(safe-area-inset-bottom);
+  display:grid;grid-template-columns:repeat(4,1fr);
+  background:var(--nav-bg);-webkit-backdrop-filter:saturate(180%) blur(18px);backdrop-filter:saturate(180%) blur(18px);
+  border-top:1px solid var(--line);
+  padding:6px 8px calc(6px + env(safe-area-inset-bottom));
 }
 nav button{
-  background:none;border:0;color:var(--muted);font:inherit;font-size:13px;
-  padding:10px 0 8px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:none;border:0;color:var(--muted);font:inherit;font-size:11px;font-weight:500;
+  padding:6px 0 4px;display:flex;flex-direction:column;align-items:center;gap:3px;
 }
-nav button span{font-size:24px;line-height:1}
-nav button.on{color:var(--accent);font-weight:600}
+nav button .ic{width:24px;height:24px;stroke-width:1.75}
+nav button.on{color:var(--accent)}
+nav button.on .ic{stroke-width:2.1}
+
+/* formuláře */
 textarea,input[type=text],input[type=password],select{
   width:100%;font:inherit;color:var(--ink);background:var(--card);
-  border:1.5px solid var(--line);border-radius:14px;padding:14px;
+  border:1px solid var(--line);border-radius:14px;padding:14px;
 }
-textarea{min-height:130px;resize:vertical}
-textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);border-color:transparent}
+textarea{min-height:110px;resize:none;line-height:1.5}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+label{display:block;font-size:14px;font-weight:600;margin:18px 0 6px}
+small,.small{color:var(--muted);font-size:14px;line-height:1.4}
+small{display:block;margin-top:6px}
+
+/* tlačítka */
 .btn{
-  width:100%;border:0;border-radius:16px;padding:16px;font:inherit;font-weight:600;
-  background:var(--accent);color:var(--accent-ink);margin-top:10px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;height:52px;border:0;border-radius:14px;padding:0 18px;font:inherit;font-weight:600;
+  background:var(--accent);color:var(--accent-ink);margin-top:12px;
 }
-.btn.ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
-.btn.small{width:auto;padding:9px 14px;font-size:15px;margin:6px 6px 0 0;border-radius:12px}
-.btn.danger{color:var(--rec)}
-.btn:active{opacity:.7}
+.btn:active{transform:scale(.98);opacity:.85}
 .btn:disabled{opacity:.5}
-.mic{
-  width:104px;height:104px;border-radius:50%;border:0;background:var(--accent);color:#fff;
-  font-size:44px;display:block;margin:18px auto 6px;box-shadow:0 6px 20px rgba(47,111,237,.35);
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.soft{background:var(--accent-soft);color:var(--accent)}
+.btn.danger{color:var(--rec)}
+.btn.small{width:auto;height:40px;padding:0 14px;font-size:15px;margin:10px 8px 0 0;border-radius:12px}
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);
 }
-.mic.rec{background:var(--rec);animation:pulse 1.2s infinite;box-shadow:0 6px 20px rgba(229,72,77,.45)}
-@keyframes pulse{50%{transform:scale(1.07)}}
-.hint{text-align:center;color:var(--muted);font-size:15px;margin:0 0 6px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.icon-btn:active{background:var(--line)}
+.back{
+  display:inline-flex;align-items:center;gap:2px;background:none;border:0;color:var(--accent);
+  font:inherit;font-weight:500;padding:4px 8px 4px 0;margin:-4px 0 6px -4px;
+}
+
+/* skladba nápadu */
+.composer{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:8px;box-shadow:var(--shadow)}
+.composer:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.composer textarea{border:0;background:transparent;min-height:140px;font-size:18px;padding:12px;outline:none}
+.composer-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:4px}
+.composer-bar .btn{margin:0;height:50px;border-radius:15px;padding:0 10px;white-space:nowrap}
+.mic.rec{background:var(--rec);color:#fff;border-color:transparent}
+.mic.rec .ic{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* karty */
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:10px 0;box-shadow:var(--shadow)}
+.card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .card .txt{white-space:pre-wrap;word-break:break-word}
-.meta{color:var(--muted);font-size:14px;margin-top:6px}
-.tag{display:inline-block;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);
-  border-radius:999px;padding:2px 10px;font-size:14px;font-weight:600;margin-right:6px}
-.tag.none{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
-.status{font-size:14px;color:var(--warn);margin-top:6px}
+.date{color:var(--muted);font-size:13px;white-space:nowrap}
+.tag{display:inline-block;background:var(--accent-soft);color:var(--accent);
+  border-radius:999px;padding:3px 11px;font-size:13px;font-weight:600;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag.none{background:transparent;border:1px dashed var(--line);color:var(--muted);font-weight:500}
+.summary{display:flex;gap:8px;align-items:flex-start;color:var(--muted);font-size:15px;margin-top:10px}
+.summary .ic{width:16px;height:16px;margin-top:3px;color:var(--accent)}
+.status{display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--muted);margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--bg)}
+.status .ic{width:18px;height:18px;margin-top:1px}
+.status.warn{background:var(--warn-soft);color:var(--warn)}
+.card-foot{display:flex;gap:8px;margin-top:14px}
+.card-foot select{
+  flex:1;min-width:0;height:40px;padding:0 34px 0 12px;font-size:15px;border-radius:12px;color:var(--muted);
+  -webkit-appearance:none;appearance:none;
+  background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center;
+}
+.actions{display:flex;flex-wrap:wrap}
+
+/* projekty */
+.proj{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;color:inherit;
+  background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:10px 0;box-shadow:var(--shadow);
+}
+.proj:active{background:var(--bg)}
+.proj .body{flex:1;min-width:0}
+.proj b{font-size:17px;font-weight:600}
+.proj .meta{color:var(--muted);font-size:14px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj > .ic{color:var(--muted);width:18px;height:18px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.proj{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:var(--card);
-  border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
-.proj b{font-size:19px}
-.badge{background:var(--accent);color:#fff;border-radius:999px;padding:1px 10px;font-size:14px;font-weight:600}
-.answer{background:color-mix(in srgb,var(--ok) 10%,var(--card));border:1px solid color-mix(in srgb,var(--ok) 35%,transparent);
-  border-radius:16px;padding:14px;margin-top:12px;white-space:pre-wrap}
-label{display:block;font-weight:600;margin:16px 0 6px}
-small,.small{color:var(--muted);font-size:14px}
-.back{background:none;border:0;color:var(--accent);font:inherit;padding:4px 0;margin-bottom:6px}
-#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);
-  background:#222;color:#fff;padding:10px 16px;border-radius:12px;font-size:15px;opacity:0;pointer-events:none;
-  transition:opacity .25s;max-width:90%;text-align:center;z-index:9}
-#toast.show{opacity:.95}
+.badge{background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:1px 10px;font-size:13px;font-weight:600}
+.empty{text-align:center;color:var(--muted);padding:36px 16px 20px}
+.empty .ic{width:36px;height:36px;stroke-width:1.5;margin-bottom:10px;opacity:.6}
+
+/* odpověď AI */
+.answer{display:flex;gap:12px;background:var(--accent-soft);border-radius:18px;padding:16px;margin-top:14px;white-space:pre-wrap}
+.answer .ic{color:var(--accent);margin-top:2px}
+
+/* nastavení */
+.group{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:4px 16px 16px;margin-top:10px;box-shadow:var(--shadow)}
+.group label:first-child{margin-top:14px}
+.stats{display:flex;gap:10px;color:var(--muted);font-size:14px;margin-top:18px;justify-content:center}
+
+#toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translate(-50%,8px);
+  display:flex;align-items:center;gap:8px;
+  background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:999px;font-size:15px;font-weight:500;opacity:0;pointer-events:none;
+  transition:opacity .25s,transform .25s;max-width:90%;z-index:9}
+#toast.show{opacity:.96;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12.4 14.6a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect width="14" height="14" x="5" y="5" rx="3"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-retry" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.8 5.41a2 2 0 0 1-1.27 1.27L7.76 16.24l1.8-5.41a2 2 0 0 1 1.27-1.27z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.38 3.62a2.12 2.12 0 0 1 3 3L7.5 18.5 3 20l1.5-4.5z"/></symbol>
+</svg>
 <div id="main"></div>
 <nav>
-  <button data-v="write"><span>✏️</span>Zapsat</button>
-  <button data-v="projects"><span>📁</span>Projekty</button>
-  <button data-v="ask"><span>💬</span>Zeptat se</button>
-  <button data-v="settings"><span>⚙️</span>Nastavení</button>
+  <button data-v="write"><svg class="ic"><use href="#i-pen"/></svg>Zapsat</button>
+  <button data-v="projects"><svg class="ic"><use href="#i-folder"/></svg>Projekty</button>
+  <button data-v="ask"><svg class="ic"><use href="#i-chat"/></svg>Zeptat se</button>
+  <button data-v="settings"><svg class="ic"><use href="#i-sliders"/></svg>Nastavení</button>
 </nav>
 <div id="toast"></div>
 <script src="app.js"></script>
