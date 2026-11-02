@@ -3,7 +3,9 @@
 /* ========== Stav a ukládání ========== */
 const LS = 'napady.v1';
 const LS_DRAFT = 'napady.draft';
-const DEFAULTS = { key: '', model: 'gemini-flash-latest', projects: [], ideas: [] };
+// "gemini-flash-latest" ukazuje na preview model, který bývá přetížený, proto stabilní verze.
+const DEFAULTS = { key: '', model: 'gemini-2.5-flash', projects: [], ideas: [] };
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -13,7 +15,10 @@ const ic = (name, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use h
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem(LS));
-    if (d) return Object.assign({}, DEFAULTS, d);
+    if (d) {
+      if (d.model === 'gemini-flash-latest') d.model = DEFAULTS.model;   // starý výchozí model
+      return Object.assign({}, DEFAULTS, d);
+    }
   } catch (e) { /* poškozená data -> začneme znovu */ }
   return Object.assign({}, DEFAULTS, { projects: [], ideas: [] });
 }
@@ -49,23 +54,33 @@ async function gemini({ parts, system, schema }) {
     body.generationConfig.responseMimeType = 'application/json';
     body.generationConfig.responseSchema = schema;
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model)}:generateContent`;
   if (/[^\x21-\x7E]/.test(S.key)) throw new Error('API klíč obsahuje mezeru nebo neplatný znak. Vložte ho znovu v Nastavení.');
-  let r;
-  try {
-    r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.key },
-      body: JSON.stringify(body)
-    });
-  } catch (e) {
-    throw new Error('Nelze se spojit s Gemini (' + e.message + '). Zkontrolujte internet a že je API klíč vložený celý.');
+
+  // Vybraný model první; když je přetížený (429/5xx) nebo neexistuje (404), zkusí se záložní.
+  let lastErr;
+  for (const model of [...new Set([S.model, ...FALLBACK_MODELS])]) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    let r;
+    try {
+      r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.key },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      throw new Error('Nelze se spojit s Gemini (' + e.message + '). Zkontrolujte internet a že je API klíč vložený celý.');
+    }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      lastErr = new Error(j?.error?.message || ('Chyba ' + r.status));
+      if ([404, 429, 500, 503, 504].includes(r.status)) continue;
+      throw lastErr;
+    }
+    const text = j?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+    if (!text) { lastErr = new Error('AI nevrátila žádný text.'); continue; }
+    return schema ? JSON.parse(text) : text.trim();
   }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j?.error?.message || ('Chyba ' + r.status));
-  const text = j?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-  if (!text) throw new Error('AI nevrátila žádný text.');
-  return schema ? JSON.parse(text) : text.trim();
+  throw lastErr;
 }
 
 const blobToBase64 = blob => new Promise((res, rej) => {
@@ -292,7 +307,7 @@ const views = {
         <small>Zdarma z <b>aistudio.google.com/apikey</b>. Klíč zůstává jen v tomto telefonu.</small>
         <label for="model">Model</label>
         <input id="model" type="text" autocapitalize="off" autocorrect="off" value="${esc(S.model)}">
-        <small>Výchozí „gemini-flash-latest“ je rychlý a levný. Při chybě modelu zkuste jiný z AI Studia.</small>
+        <small>Výchozí „gemini-2.5-flash“ je stabilní a rychlý. Když je přetížený, appka sama zkusí záložní model.</small>
         <button class="btn" data-act="savesettings">${ic('check')}Uložit nastavení</button>
         <button class="btn ghost" data-act="testkey" ${testRes && testRes.busy ? 'disabled' : ''}>${testRes && testRes.busy ? ic('loader', 'spin') + 'Zkouším…' : ic('sparkles') + 'Otestovat spojení'}</button>
         ${testRes && !testRes.busy ? `<div class="status ${testRes.ok ? '' : 'warn'}">${ic(testRes.ok ? 'check' : 'alert')}<span>${esc(testRes.msg)}</span></div>` : ''}

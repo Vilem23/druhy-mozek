@@ -39,7 +39,7 @@ Osobní appka na iPhone pro uživatele (jen pro něj samotného), kterého nahod
 ## Stav a co NENÍ ověřeno
 Kód prošel jen kontrolou syntaxe (`node --check`). **Na skutečném iPhonu zatím nezkoušeno.** Rizika:
 1. **Formát nahrávky:** iOS Safari nahrává `audio/mp4`. Není jisté, že ho Gemini API přijme. Když ne, zkusit jiný `mime_type` (např. `audio/aac`), nebo audio převést (např. na WAV přes Web Audio API) před odesláním.
-2. **Název modelu:** výchozí je `gemini-flash-latest` (v Nastavení jde změnit). Při chybě modelu ověřit aktuální názvy v dokumentaci Gemini API.
+2. **Název modelu:** výchozí je stabilní `gemini-2.5-flash` (v Nastavení jde změnit). Alias `gemini-flash-latest` ukazuje na preview model, který bývá přetížený („high demand“), proto se nepoužívá. `gemini()` při 404/429/5xx automaticky zkusí `FALLBACK_MODELS`. Starý uložený `gemini-flash-latest` se při načtení přepíše na výchozí.
 3. `MediaRecorder` a mikrofon v PWA z plochy na iOS: ověřit, že se zobrazí žádost o povolení.
 4. Uživatelské chybové hlášky zobrazují surovou zprávu z API. Můžou chtít přívětivější české texty.
 
