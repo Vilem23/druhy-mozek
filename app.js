@@ -472,6 +472,43 @@ document.addEventListener('input', e => {
   }
 });
 
+/* ========== Potažení dolů = obnovit appku ========== */
+(() => {
+  const main = $('#main'), ptr = $('#ptr');
+  const TRIGGER = 56, MAX = 84;
+  let y0 = null, pull = 0;
+  const show = px => {
+    ptr.style.opacity = Math.min(1, px / 30);
+    ptr.style.transform = `translate(-50%, ${px - 70}px)`;
+    ptr.firstElementChild.style.transform = `rotate(${px * 4}deg)`;
+  };
+  main.addEventListener('touchstart', e => {
+    const free = main.scrollTop <= 0 && !recording && !e.target.closest('textarea,input,select');
+    y0 = free ? e.touches[0].clientY : null;
+    pull = 0;
+    ptr.classList.remove('snap');
+  }, { passive: true });
+  main.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    if (main.scrollTop > 0) { y0 = null; show(0); return; }
+    pull = Math.max(0, Math.min(MAX, (e.touches[0].clientY - y0) * 0.5));
+    show(pull);
+  }, { passive: true });
+  const end = () => {
+    if (y0 === null) return;
+    y0 = null;
+    ptr.classList.add('snap');
+    if (pull >= TRIGGER) {
+      show(TRIGGER);
+      ptr.firstElementChild.classList.add('spin');
+      setTimeout(() => location.reload(), 250);
+    } else show(0);
+    pull = 0;
+  };
+  main.addEventListener('touchend', end);
+  main.addEventListener('touchcancel', end);
+})();
+
 /* ========== Start ========== */
 // Nápady, které při zavření appky zůstaly "ve zpracování", označíme k opakování.
 S.ideas.forEach(i => { if (i.status === 'pending' || i.status === 'transcribing') i.status = 'error'; });
