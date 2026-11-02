@@ -26,6 +26,7 @@ let curProject = null;          // id projektu v detailu ('' = Nezařazeno)
 let ask = { q: '', a: '', busy: false };
 let projAnswers = {};           // id projektu -> odpověď "kde jsem skončil"
 let busyProj = {};
+let testRes = null;             // výsledek "Otestovat spojení" v Nastavení
 const audioStore = new Map();   // id nápadu -> nahrávka (jen v paměti, pro opakování)
 
 function toast(msg) {
@@ -49,11 +50,17 @@ async function gemini({ parts, system, schema }) {
     body.generationConfig.responseSchema = schema;
   }
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model)}:generateContent`;
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.key },
-    body: JSON.stringify(body)
-  });
+  if (/[^\x21-\x7E]/.test(S.key)) throw new Error('API klíč obsahuje mezeru nebo neplatný znak. Vložte ho znovu v Nastavení.');
+  let r;
+  try {
+    r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.key },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    throw new Error('Nelze se spojit s Gemini (' + e.message + '). Zkontrolujte internet a že je API klíč vložený celý.');
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j?.error?.message || ('Chyba ' + r.status));
   const text = j?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
@@ -287,6 +294,8 @@ const views = {
         <input id="model" type="text" autocapitalize="off" autocorrect="off" value="${esc(S.model)}">
         <small>Výchozí „gemini-flash-latest“ je rychlý a levný. Při chybě modelu zkuste jiný z AI Studia.</small>
         <button class="btn" data-act="savesettings">${ic('check')}Uložit nastavení</button>
+        <button class="btn ghost" data-act="testkey" ${testRes && testRes.busy ? 'disabled' : ''}>${testRes && testRes.busy ? ic('loader', 'spin') + 'Zkouším…' : ic('sparkles') + 'Otestovat spojení'}</button>
+        ${testRes && !testRes.busy ? `<div class="status ${testRes.ok ? '' : 'warn'}">${ic(testRes.ok ? 'check' : 'alert')}<span>${esc(testRes.msg)}</span></div>` : ''}
       </div>
       <h2>Záloha</h2>
       <div class="group">
@@ -386,11 +395,21 @@ const actions = {
   },
 
   savesettings() {
-    S.key = ($('#key').value || '').trim();
+    S.key = ($('#key').value || '').replace(/\s+/g, '');
     S.model = ($('#model').value || '').trim() || DEFAULTS.model;
     save(); toast('Nastavení uloženo');
     // Nápady uložené bez AI se zpracují teď.
     S.ideas.filter(i => i.status === 'nokey').forEach(i => enrich(i.id));
+  },
+
+  async testkey() {
+    actions.savesettings();
+    testRes = { busy: true }; render();
+    try {
+      await gemini({ system: 'Odpovídej jedním slovem.', parts: [{ text: 'Odpověz: OK' }] });
+      testRes = { ok: true, msg: 'Spojení s Gemini funguje.' };
+    } catch (e) { testRes = { ok: false, msg: e.message }; }
+    render();
   },
 
   async export() {
