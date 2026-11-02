@@ -405,10 +405,19 @@ const actions = {
   async testkey() {
     actions.savesettings();
     testRes = { busy: true }; render();
+    const probe = async (label, fn) => {
+      try { await fn(); return `${label}: OK`; } catch (e) { return `${label}: selhalo (${e.message})`; }
+    };
+    const lines = [
+      await probe('Internet', () => fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store' })),
+      await probe('Server Google AI', () => fetch('https://generativelanguage.googleapis.com/', { mode: 'no-cors', cache: 'no-store' }))
+    ];
+    let ok = false;
     try {
       await gemini({ system: 'Odpovídej jedním slovem.', parts: [{ text: 'Odpověz: OK' }] });
-      testRes = { ok: true, msg: 'Spojení s Gemini funguje.' };
-    } catch (e) { testRes = { ok: false, msg: e.message }; }
+      lines.push('Gemini: OK'); ok = true;
+    } catch (e) { lines.push('Gemini: ' + e.message); }
+    testRes = { ok, msg: lines.join('\n') };
     render();
   },
 
