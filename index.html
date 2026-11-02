@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Nápady">
+<meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151618" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Nápady</title>
+<style>
+:root{
+  --bg:#f6f5f1; --card:#fff; --ink:#1d1f22; --muted:#6b6f76; --line:#e3e1da;
+  --accent:#2f6fed; --accent-ink:#fff; --rec:#e5484d; --ok:#2e9e5b; --warn:#b7791f;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#151618; --card:#202225; --ink:#f0f0ee; --muted:#9a9ea5; --line:#303338; --accent:#5b8cff; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg);color:var(--ink);
+  font:18px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top);
+}
+#main{flex:1;overflow-y:auto;padding:16px 16px 24px;-webkit-overflow-scrolling:touch}
+h1{font-size:26px;margin:4px 0 14px}
+h2{font-size:20px;margin:22px 0 10px}
+nav{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  background:var(--card);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+nav button{
+  background:none;border:0;color:var(--muted);font:inherit;font-size:13px;
+  padding:10px 0 8px;display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+nav button span{font-size:24px;line-height:1}
+nav button.on{color:var(--accent);font-weight:600}
+textarea,input[type=text],input[type=password],select{
+  width:100%;font:inherit;color:var(--ink);background:var(--card);
+  border:1.5px solid var(--line);border-radius:14px;padding:14px;
+}
+textarea{min-height:130px;resize:vertical}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);border-color:transparent}
+.btn{
+  width:100%;border:0;border-radius:16px;padding:16px;font:inherit;font-weight:600;
+  background:var(--accent);color:var(--accent-ink);margin-top:10px;
+}
+.btn.ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
+.btn.small{width:auto;padding:9px 14px;font-size:15px;margin:6px 6px 0 0;border-radius:12px}
+.btn.danger{color:var(--rec)}
+.btn:active{opacity:.7}
+.btn:disabled{opacity:.5}
+.mic{
+  width:104px;height:104px;border-radius:50%;border:0;background:var(--accent);color:#fff;
+  font-size:44px;display:block;margin:18px auto 6px;box-shadow:0 6px 20px rgba(47,111,237,.35);
+}
+.mic.rec{background:var(--rec);animation:pulse 1.2s infinite;box-shadow:0 6px 20px rgba(229,72,77,.45)}
+@keyframes pulse{50%{transform:scale(1.07)}}
+.hint{text-align:center;color:var(--muted);font-size:15px;margin:0 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.card .txt{white-space:pre-wrap;word-break:break-word}
+.meta{color:var(--muted);font-size:14px;margin-top:6px}
+.tag{display:inline-block;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);
+  border-radius:999px;padding:2px 10px;font-size:14px;font-weight:600;margin-right:6px}
+.tag.none{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
+.status{font-size:14px;color:var(--warn);margin-top:6px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.proj{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:var(--card);
+  border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.proj b{font-size:19px}
+.badge{background:var(--accent);color:#fff;border-radius:999px;padding:1px 10px;font-size:14px;font-weight:600}
+.answer{background:color-mix(in srgb,var(--ok) 10%,var(--card));border:1px solid color-mix(in srgb,var(--ok) 35%,transparent);
+  border-radius:16px;padding:14px;margin-top:12px;white-space:pre-wrap}
+label{display:block;font-weight:600;margin:16px 0 6px}
+small,.small{color:var(--muted);font-size:14px}
+.back{background:none;border:0;color:var(--accent);font:inherit;padding:4px 0;margin-bottom:6px}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  background:#222;color:#fff;padding:10px 16px;border-radius:12px;font-size:15px;opacity:0;pointer-events:none;
+  transition:opacity .25s;max-width:90%;text-align:center;z-index:9}
+#toast.show{opacity:.95}
+</style>
+</head>
+<body>
+<div id="main"></div>
+<nav>
+  <button data-v="write"><span>✏️</span>Zapsat</button>
+  <button data-v="projects"><span>📁</span>Projekty</button>
+  <button data-v="ask"><span>💬</span>Zeptat se</button>
+  <button data-v="settings"><span>⚙️</span>Nastavení</button>
+</nav>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
