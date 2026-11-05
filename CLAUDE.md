@@ -25,6 +25,7 @@ Osobní appka na iPhone pro uživatele (jen pro něj samotného), kterého nahod
 { key, model, projects:[{id,name,desc}],
   ideas:[{id,text,original,projectId,summary,created,status,err,suggest}] }
 ```
+- `checklist:[{t,done}]` (nepovinné) = odškrtávací seznam úkolů. AI ho vrací v `enrich()` (pole `checklist` v `SORT_SCHEMA`), když nápad obsahuje víc úkolů; jinak ho jde vyžádat tlačítkem „Udělat checklist“ (`actions.mkcheck`). Položky se do dotazů „Kde jsem skončil?“ a „Zeptat se“ posílají i se stavem (`checkText`).
 - `original` = co uživatel řekl (přepis hlasu doslova) nebo napsal; `text` = přehledná, uspořádaná verze od AI. Karta má malé tlačítko (ikona uvozovek), které přepíná mezi nimi (stav `showOrig` je jen v paměti). Starší nápady bez `original` tlačítko nemají. `enrich()` posílá AI vždy `original`.
 - `status`: `pending` | `transcribing` | `done` | `error` | `nokey`
 - `projectId: ''` znamená Nezařazeno. `suggest` je název nového projektu navržený AI.

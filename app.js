@@ -31,7 +31,8 @@ let curProject = null;          // id projektu v detailu ('' = Nezařazeno)
 let ask = { q: '', a: '', busy: false };
 let projAnswers = {};           // id projektu -> odpověď "kde jsem skončil"
 let busyProj = {};
-const showOrig = new Set();     // id nápadů, u kterých je teď vidět původní zápis
+const busyCheck = new Set();    // id nápadů, u kterých se právě tvoří checklist
+const showOrig = new Set();    // id nápadů, u kterých je teď vidět původní zápis
 let testRes = null;            // výsledek "Otestovat spojení" v Nastavení
 const audioStore = new Map();   // id nápadu -> nahrávka (jen v paměti, pro opakování)
 
@@ -107,10 +108,16 @@ const SORT_SCHEMA = {
     clean: { type: 'STRING' },
     project: { type: 'STRING' },
     newProject: { type: 'STRING' },
-    summary: { type: 'STRING' }
+    summary: { type: 'STRING' },
+    checklist: { type: 'ARRAY', items: { type: 'STRING' } }
   },
   required: ['clean', 'project', 'summary']
 };
+
+const toChecklist = arr => (Array.isArray(arr) ? arr : [])
+  .map(t => String(t).trim()).filter(Boolean).slice(0, 20).map(t => ({ t, done: false }));
+const checkText = i => (i.checklist && i.checklist.length)
+  ? ' Checklist: ' + i.checklist.map(c => `[${c.done ? 'x' : ' '}] ${c.t}`).join('; ') : '';
 
 async function enrich(id) {
   const idea = S.ideas.find(i => i.id === id);
@@ -129,10 +136,11 @@ async function enrich(id) {
   const system =
 `Jsi pomocník pro člověka s krátkou pamětí, který si zapisuje nápady. Dostaneš nápad jako text nebo hlasovou nahrávku (česky).
 1) Pokud je to nahrávka, přepiš ji DOSLOVA do pole "transcript" (bez úprav). U textu nech "transcript" prázdné.
-2) Do pole "clean" dej nápad přepsaný do přehledného, lépe zorganizovaného textu: oprav překlepy a vycpávky ("ehm", opakování), seřaď myšlenky logicky a rozděl je do krátkých odstavců. Pokud nápad obsahuje více bodů, kroků nebo úkolů, napiš je jako odrážky, každou na novém řádku začínající "- ". Používej jen prostý text (žádný markdown, žádné hvězdičky ani #). Nic nevymýšlej a nepřidávej nové informace, zachovej všechny detaily, čísla a jména. Krátkou jednoduchou větu jen vyčisti, nedělej z ní zbytečně dlouhý text.
+2) Do pole "clean" dej nápad přepsaný do přehledného, lépe zorganizovaného textu: oprav překlepy a vycpávky ("ehm", opakování), seřaď myšlenky logicky a rozděl je do krátkých odstavců. Pokud nápad obsahuje více bodů, kroků nebo úkolů, napiš je jako odrážky, každou na novém řádku začínající "- ". Používej jen prostý text (žádný markdown, žádné hvězdičky ani #). Nic nevymýšlej a nepřidávej nové informace, zachovej všechny detaily, čísla a jména. Krátkou jednoduchou větu jen vyčisti, nedělej z ní zbytečně dlouhý text. Pokud vyplníš "checklist" (bod 6), úkoly v "clean" neopakuj jako odrážky; nech tam jen krátký souvislý kontext nápadu.
 3) Do pole "project" dej PŘESNÝ název nejvhodnějšího z existujících projektů. Pokud žádný jasně nesedí, nech prázdné.
 4) Pokud žádný projekt nesedí a nápad vypadá jako samostatné téma, navrhni do "newProject" krátký název nového projektu, jinak nech prázdné.
 5) Do "summary" dej shrnutí jednou krátkou větou.
+6) Pokud nápad obsahuje více konkrétních úkolů, kroků nebo věcí k udělání (nebo o checklist uživatel výslovně řekne), dej je do pole "checklist" jako krátké samostatné položky (jedna úloha na položku, stručně, max. 20 položek, nic nevymýšlej). U nápadu, který úkoly nemá, nech "checklist" prázdné pole.
 Existující projekty:
 ${projectContext()}`;
 
@@ -145,6 +153,8 @@ ${projectContext()}`;
     else if (!idea.original) idea.original = idea.text;
     idea.text = (out.clean || '').trim() || idea.original;
     idea.summary = (out.summary || '').trim();
+    const items = toChecklist(out.checklist);
+    if (items.length) idea.checklist = items;
     const match = S.projects.find(p => p.name.toLowerCase() === (out.project || '').trim().toLowerCase());
     idea.projectId = match ? match.id : '';
     idea.suggest = !match && out.newProject ? out.newProject.trim() : '';
@@ -224,6 +234,13 @@ function ideaCard(i) {
   const orig = hasOrig && showOrig.has(i.id);
   const canRetry = (i.status === 'error' || i.status === 'nokey') && S.key;
   const mk = i.suggest && !i.projectId;
+  const cl = i.checklist || [];
+  const busy = busyCheck.has(i.id);
+  const canCheck = !cl.length && i.status === 'done' && i.text && S.key;
+  const checklist = cl.length ? `<div class="check-head"><span>Checklist · ${cl.filter(c => c.done).length}/${cl.length}</span>
+      <button class="icon-btn mini" data-act="delcheck" data-id="${i.id}" aria-label="Odebrat checklist">${ic('trash')}</button></div>
+    <div class="check">${cl.map((c, n) => `<button class="item ${c.done ? 'done' : ''}" data-act="tick" data-id="${i.id}" data-n="${n}" aria-pressed="${c.done}">
+      <span class="box">${c.done ? ic('check') : ''}</span><span>${esc(c.t)}</span></button>`).join('')}</div>` : '';
   return `<div class="card">
     <div class="card-top">
       ${name ? `<span class="tag">${esc(name)}</span>` : '<span class="tag none">Nezařazeno</span>'}
@@ -232,9 +249,11 @@ function ideaCard(i) {
     </div>
     ${orig ? '<div class="orig-label">Původní zápis</div>' : ''}
     <div class="txt ${orig ? 'orig' : ''}">${orig ? esc(i.original) : text}</div>
-    ${i.summary && i.summary !== i.text ? `<div class="summary">${ic('sparkles')}<span>${esc(i.summary)}</span></div>` : ''}
+    ${checklist}
+    ${i.summary && i.summary !== i.text ?`<div class="summary">${ic('sparkles')}<span>${esc(i.summary)}</span></div>` : ''}
     ${status}
-    ${mk || canRetry ? `<div class="actions">
+    ${mk || canRetry || canCheck ? `<div class="actions">
+      ${canCheck ? `<button class="btn small ghost" data-act="mkcheck" data-id="${i.id}" ${busy ? 'disabled' : ''}>${busy ? ic('loader', 'spin') + 'Tvořím…' : ic('list') + 'Udělat checklist'}</button>` : ''}
       ${mk ? `<button class="btn small soft" data-act="mkproj" data-id="${i.id}">${ic('plus')}Založit projekt „${esc(i.suggest)}“</button>` : ''}
       ${canRetry ? `<button class="btn small ghost" data-act="retry" data-id="${i.id}">${ic('retry')}Zkusit znovu</button>` : ''}
     </div>` : ''}
@@ -386,6 +405,32 @@ const actions = {
     save(); render();
   },
   retry(el) { enrich(el.dataset.id); },
+  tick(el) {
+    const idea = S.ideas.find(i => i.id === el.dataset.id);
+    const c = idea && idea.checklist && idea.checklist[+el.dataset.n];
+    if (!c) return;
+    c.done = !c.done; save(); render();
+  },
+  delcheck(el) {
+    const idea = S.ideas.find(i => i.id === el.dataset.id); if (!idea) return;
+    if (!confirm('Odebrat checklist z tohoto nápadu?')) return;
+    delete idea.checklist; save(); render();
+  },
+  async mkcheck(el) {
+    const idea = S.ideas.find(i => i.id === el.dataset.id); if (!idea) return;
+    busyCheck.add(idea.id); render();
+    try {
+      const out = await gemini({
+        system: 'Z textu nápadu vytvoř checklist: krátké samostatné úkoly nebo kroky (jeden na položku, maximálně 20, česky). Nic nevymýšlej a nepřidávej, co v textu není. Pokud text nemá žádné konkrétní úkoly, rozděl nápad na rozumné kroky, jak ho zrealizovat.',
+        parts: [{ text: idea.original || idea.text }],
+        schema: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['items'] }
+      });
+      const items = toChecklist(out.items);
+      if (items.length) idea.checklist = items; else toast('AI žádné položky nenašla.');
+      save();
+    } catch (e) { toast(e.message.slice(0, 120)); }
+    busyCheck.delete(idea.id); render();
+  },
   toggleorig(el) {
     const id = el.dataset.id;
     showOrig.has(id) ? showOrig.delete(id) : showOrig.add(id);
@@ -400,7 +445,7 @@ const actions = {
     try {
       projAnswers[p.id] = await gemini({
         system: 'Pomáháš člověku s krátkou pamětí. Z jeho zápisků v projektu stručně česky shrň: 1) co k projektu řešil, 2) kde skončil, 3) co by mohl udělat dál. Piš jednoduše, krátce, maximálně 6 vět. Nic si nevymýšlej.',
-        parts: [{ text: `Projekt: ${p.name}\n${p.desc || ''}\n\nZápisky (od nejnovějšího):\n` + items.slice(0, 80).map(i => `[${fmt(i.created)}] ${i.text.slice(0, 500)}`).join('\n') }]
+        parts: [{ text: `Projekt: ${p.name}\n${p.desc || ''}\n\nZápisky (od nejnovějšího):\n` + items.slice(0, 80).map(i => `[${fmt(i.created)}] ${i.text.slice(0, 500)}${checkText(i)}`).join('\n') }]
       });
     } catch (e) { projAnswers[p.id] = 'Chyba: ' + e.message; }
     busyProj[p.id] = false; render();
@@ -412,7 +457,7 @@ const actions = {
     if (!S.ideas.length) { ask.a = 'Zatím nemáte žádné zápisky.'; render(); return; }
     ask.busy = true; ask.a = ''; render();
     const notes = S.ideas.filter(i => i.text).slice(0, 300)
-      .map(i => `[${fmt(i.created)}] [${projName(i.projectId) || 'Nezařazeno'}] ${i.text.slice(0, 400)}`).join('\n');
+      .map(i => `[${fmt(i.created)}] [${projName(i.projectId) || 'Nezařazeno'}] ${i.text.slice(0, 400)}${checkText(i)}`).join('\n');
     try {
       ask.a = await gemini({
         system: 'Odpovídáš česky, stručně a jednoduše (člověk má krátkou paměť). Vycházej pouze z poskytnutých zápisků. Pokud odpověď v zápiscích není, řekni to. Dnes je ' + new Date().toLocaleDateString('cs-CZ') + '.',
