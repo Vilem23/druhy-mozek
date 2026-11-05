@@ -23,8 +23,9 @@ Osobní appka na iPhone pro uživatele (jen pro něj samotného), kterého nahod
 ## Datový model (`localStorage`, klíč `napady.v1`)
 ```
 { key, model, projects:[{id,name,desc}],
-  ideas:[{id,text,projectId,summary,created,status,err,suggest}] }
+  ideas:[{id,text,original,projectId,summary,created,status,err,suggest}] }
 ```
+- `original` = co uživatel řekl (přepis hlasu doslova) nebo napsal; `text` = přehledná, uspořádaná verze od AI. Karta má malé tlačítko (ikona uvozovek), které přepíná mezi nimi (stav `showOrig` je jen v paměti). Starší nápady bez `original` tlačítko nemají. `enrich()` posílá AI vždy `original`.
 - `status`: `pending` | `transcribing` | `done` | `error` | `nokey`
 - `projectId: ''` znamená Nezařazeno. `suggest` je název nového projektu navržený AI.
 - Rozepsaný text je zvlášť v klíči `napady.draft`.

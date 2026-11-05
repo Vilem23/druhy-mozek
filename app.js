@@ -31,7 +31,8 @@ let curProject = null;          // id projektu v detailu ('' = Nezařazeno)
 let ask = { q: '', a: '', busy: false };
 let projAnswers = {};           // id projektu -> odpověď "kde jsem skončil"
 let busyProj = {};
-let testRes = null;             // výsledek "Otestovat spojení" v Nastavení
+const showOrig = new Set();     // id nápadů, u kterých je teď vidět původní zápis
+let testRes = null;            // výsledek "Otestovat spojení" v Nastavení
 const audioStore = new Map();   // id nápadu -> nahrávka (jen v paměti, pro opakování)
 
 function toast(msg) {
@@ -121,13 +122,14 @@ async function enrich(id) {
   if (blob) {
     parts.push({ inline_data: { mime_type: (blob.type || 'audio/mp4').split(';')[0], data: await blobToBase64(blob) } });
   }
-  if (idea.text) parts.push({ text: 'Text nápadu:\n' + idea.text });
+  const said = idea.original || idea.text;     // vždy posíláme původní znění, ne už upravený text
+  if (said) parts.push({ text: 'Text nápadu:\n' + said });
   if (!parts.length) return;
 
   const system =
 `Jsi pomocník pro člověka s krátkou pamětí, který si zapisuje nápady. Dostaneš nápad jako text nebo hlasovou nahrávku (česky).
-1) Pokud je to nahrávka, přepiš ji do pole "transcript". U textu nech "transcript" prázdné.
-2) Do pole "clean" dej vyčištěný text nápadu: oprav překlepy a vycpávky ("ehm", opakování), ale nic nevymýšlej a zachovej všechny detaily.
+1) Pokud je to nahrávka, přepiš ji DOSLOVA do pole "transcript" (bez úprav). U textu nech "transcript" prázdné.
+2) Do pole "clean" dej nápad přepsaný do přehledného, lépe zorganizovaného textu: oprav překlepy a vycpávky ("ehm", opakování), seřaď myšlenky logicky a rozděl je do krátkých odstavců. Pokud nápad obsahuje více bodů, kroků nebo úkolů, napiš je jako odrážky, každou na novém řádku začínající "- ". Používej jen prostý text (žádný markdown, žádné hvězdičky ani #). Nic nevymýšlej a nepřidávej nové informace, zachovej všechny detaily, čísla a jména. Krátkou jednoduchou větu jen vyčisti, nedělej z ní zbytečně dlouhý text.
 3) Do pole "project" dej PŘESNÝ název nejvhodnějšího z existujících projektů. Pokud žádný jasně nesedí, nech prázdné.
 4) Pokud žádný projekt nesedí a nápad vypadá jako samostatné téma, navrhni do "newProject" krátký název nového projektu, jinak nech prázdné.
 5) Do "summary" dej shrnutí jednou krátkou větou.
@@ -138,8 +140,10 @@ ${projectContext()}`;
   render();
   try {
     const out = await gemini({ parts, system, schema: SORT_SCHEMA });
-    if (blob) idea.text = (out.transcript || out.clean || '').trim() || idea.text;
-    else if (out.clean) idea.text = out.clean.trim();
+    // original = co uživatel skutečně řekl/napsal; text = přehledná verze od AI
+    if (blob) idea.original = (out.transcript || out.clean || '').trim() || idea.original || idea.text;
+    else if (!idea.original) idea.original = idea.text;
+    idea.text = (out.clean || '').trim() || idea.original;
     idea.summary = (out.summary || '').trim();
     const match = S.projects.find(p => p.name.toLowerCase() === (out.project || '').trim().toLowerCase());
     idea.projectId = match ? match.id : '';
@@ -158,7 +162,7 @@ ${projectContext()}`;
 async function submit(blob) {
   const text = draft.trim();
   if (!text && !blob) { toast('Nejdřív něco napište nebo nahrajte.'); return; }
-  const idea = { id: uid(), text, projectId: '', summary: '', created: Date.now(), status: 'pending' };
+  const idea = { id: uid(), text, original: text, projectId: '', summary: '', created: Date.now(), status: 'pending' };
   S.ideas.unshift(idea);
   if (blob) audioStore.set(idea.id, blob);
   draft = ''; localStorage.removeItem(LS_DRAFT);
@@ -216,14 +220,18 @@ function ideaCard(i) {
   const text = i.text ? esc(i.text) : '<i class="small">(nahrávka zatím není přepsaná)</i>';
   const opts = ['<option value="">Nezařazeno</option>']
     .concat(S.projects.map(p => `<option value="${p.id}" ${p.id === i.projectId ? 'selected' : ''}>${esc(p.name)}</option>`)).join('');
+  const hasOrig = !!i.original && i.original !== i.text;
+  const orig = hasOrig && showOrig.has(i.id);
   const canRetry = (i.status === 'error' || i.status === 'nokey') && S.key;
   const mk = i.suggest && !i.projectId;
   return `<div class="card">
     <div class="card-top">
       ${name ? `<span class="tag">${esc(name)}</span>` : '<span class="tag none">Nezařazeno</span>'}
-      <span class="date">${fmt(i.created)}</span>
+      <span class="card-meta"><span class="date">${fmt(i.created)}</span>${hasOrig
+        ? `<button class="icon-btn mini ${orig ? 'on' : ''}" data-act="toggleorig" data-id="${i.id}" aria-pressed="${orig}" aria-label="${orig ? 'Zobrazit upravený text' : 'Zobrazit původní zápis'}">${ic('quote')}</button>` : ''}</span>
     </div>
-    <div class="txt">${text}</div>
+    ${orig ? '<div class="orig-label">Původní zápis</div>' : ''}
+    <div class="txt ${orig ? 'orig' : ''}">${orig ? esc(i.original) : text}</div>
     ${i.summary && i.summary !== i.text ? `<div class="summary">${ic('sparkles')}<span>${esc(i.summary)}</span></div>` : ''}
     ${status}
     ${mk || canRetry ? `<div class="actions">
@@ -378,6 +386,11 @@ const actions = {
     save(); render();
   },
   retry(el) { enrich(el.dataset.id); },
+  toggleorig(el) {
+    const id = el.dataset.id;
+    showOrig.has(id) ? showOrig.delete(id) : showOrig.add(id);
+    render();
+  },
 
   async where() {
     const p = S.projects.find(p => p.id === curProject); if (!p) return;
