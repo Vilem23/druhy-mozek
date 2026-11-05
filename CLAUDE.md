@@ -15,7 +15,8 @@ Osobní appka na iPhone pro uživatele (jen pro něj samotného), kterého nahod
 - Uživatel je netechnický až středně technický. Rozhodnutí vysvětluj stručně a jednoduše.
 
 ## Soubory
-- `index.html` – kostra stránky, všechen CSS, spodní navigace (Zapsat, Projekty, Zeptat se, Nastavení).
+- `index.html` – kostra stránky, všechen CSS, spodní navigace (Zapsat, Projekty, AI chat, Nastavení).
+- `chat.js` – záložka AI chat: konverzace s Gemini, nástroje (function calling) pro úpravu nápadů/projektů/checklistů (`TOOL_RUN`), tlačítko Vrátit změny. Načítá se po `app.js` a používá jeho globály (`S`, `gemini`, `geminiCall`, `views`, `actions`…).
 - `app.js` – veškerá logika. Dá se číst shora dolů: stav a ukládání, Gemini, zápis a nahrávání, vykreslování (`views`), akce (`actions`), události, start.
 - `sw.js` – service worker (síť první, při výpadku cache). Cizí domény, tedy volání Gemini, se necachují.
 - `manifest.webmanifest`, `icon-180/192/512.png` – instalace na plochu.
@@ -35,7 +36,8 @@ Osobní appka na iPhone pro uživatele (jen pro něj samotného), kterého nahod
 ## Jak to funguje
 - `submit()` nápad nejdřív **uloží** a až pak volá `enrich()`. Nápad se nesmí ztratit, ani když AI selže nebo není internet.
 - `enrich()` posílá Gemini text nebo audio (`inline_data`, base64) + seznam projektů s popisy a třemi posledními nápady každého. Odpověď je JSON podle `SORT_SCHEMA`: `transcript, clean, project, newProject, summary`. Projekt se páruje podle přesného názvu (bez ohledu na velikost písmen).
-- „Kde jsem skončil?" (`actions.where`) a záložka Zeptat se (`actions.doask`) posílají zápisky jako text a dostanou prosté české shrnutí.
+- „Kde jsem skončil?" (`actions.where`) posílá zápisky jako text a dostane prosté české shrnutí.
+- **AI chat** (`chat.js`): `runChat()` posílá Gemini historii zpráv + celá data appky v system promptu (`chatSystem()`) a smyčku do 8 kroků, ve které AI volá nástroje (`CHAT_TOOLS` / `TOOL_RUN`: update_idea, create_idea, delete_ideas, merge_ideas, create/update/delete_project). Hlasová zpráva se nejdřív přepíše na text. Před každým kolem, které něco změní, se uloží kopie dat (`napady.undo`); tlačítko „Vrátit změny“ vrací jen poslední zásah. Historie chatu je v `napady.chat` (posledních 40 zpráv). Nový nástroj = deklarace v `CHAT_TOOLS` + funkce v `TOOL_RUN`.
 - Při startu se nápady zaseknuté ve stavu `pending` nebo `transcribing` označí jako `error`, aby šly zkusit znovu.
 
 ## Stav a co NENÍ ověřeno

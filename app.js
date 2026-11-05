@@ -28,7 +28,6 @@ function save() { localStorage.setItem(LS, JSON.stringify(S)); }
 let draft = localStorage.getItem(LS_DRAFT) || '';
 let view = 'write';
 let curProject = null;          // id projektu v detailu ('' = Nezařazeno)
-let ask = { q: '', a: '', busy: false };
 let projAnswers = {};           // id projektu -> odpověď "kde jsem skončil"
 let busyProj = {};
 const busyCheck = new Set();    // id nápadů, u kterých se právě tvoří checklist
@@ -45,20 +44,10 @@ function toast(msg) {
 }
 
 /* ========== Gemini ========== */
-async function gemini({ parts, system, schema }) {
+/* Jedno volání Gemini. Vybraný model první; když je přetížený (429/5xx) nebo neexistuje (404), zkusí se záložní. */
+async function geminiCall(body, valid = j => j?.candidates?.[0]?.content?.parts?.length) {
   if (!S.key) throw new Error('Chybí API klíč (Nastavení).');
-  const body = {
-    systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts }],
-    generationConfig: { temperature: 0.2 }
-  };
-  if (schema) {
-    body.generationConfig.responseMimeType = 'application/json';
-    body.generationConfig.responseSchema = schema;
-  }
   if (/[^\x21-\x7E]/.test(S.key)) throw new Error('API klíč obsahuje mezeru nebo neplatný znak. Vložte ho znovu v Nastavení.');
-
-  // Vybraný model první; když je přetížený (429/5xx) nebo neexistuje (404), zkusí se záložní.
   let lastErr;
   for (const model of [...new Set([S.model, ...FALLBACK_MODELS])]) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -78,11 +67,26 @@ async function gemini({ parts, system, schema }) {
       if ([404, 429, 500, 503, 504].includes(r.status)) continue;
       throw lastErr;
     }
-    const text = j?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-    if (!text) { lastErr = new Error('AI nevrátila žádný text.'); continue; }
-    return schema ? JSON.parse(text) : text.trim();
+    if (!valid(j)) { lastErr = new Error('AI nevrátila žádný text.'); continue; }
+    return j;
   }
   throw lastErr;
+}
+
+const textOf = j => j?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+
+async function gemini({ parts, system, schema }) {
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: { temperature: 0.2 }
+  };
+  if (schema) {
+    body.generationConfig.responseMimeType = 'application/json';
+    body.generationConfig.responseSchema = schema;
+  }
+  const j = await geminiCall(body, textOf);
+  return schema ? JSON.parse(textOf(j)) : textOf(j).trim();
 }
 
 const blobToBase64 = blob => new Promise((res, rej) => {
@@ -182,7 +186,7 @@ async function submit(blob) {
 }
 
 /* Nahrávání hlasu */
-let rec = null, chunks = [], recording = false;
+let rec = null, chunks = [], recording = false, recTarget = 'idea';
 async function toggleRec() {
   if (recording) { rec.stop(); return; }
   if (!navigator.mediaDevices || !window.MediaRecorder) { toast('Tento prohlížeč neumí nahrávat.'); return; }
@@ -192,13 +196,14 @@ async function toggleRec() {
     rec = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
     chunks = [];
     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recTarget = view === 'chat' ? 'chat' : 'idea';
     rec.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
       recording = false;
       const blob = new Blob(chunks, { type: rec.mimeType || mime || 'audio/mp4' });
       updateRecUI();
       if (blob.size < 1000) { toast('Nahrávka byla příliš krátká.'); return; }
-      submit(blob);
+      recTarget === 'chat' ? sendChat('', blob) : submit(blob);
     };
     rec.start();
     recording = true;
@@ -209,9 +214,10 @@ async function toggleRec() {
 }
 const micInner = () => recording ? ic('stop', 'fill') + 'Zastavit' : ic('mic') + 'Nahrát hlas';
 function updateRecUI() {
-  const b = $('#mic'); if (!b) return;
-  b.classList.toggle('rec', recording);
-  b.innerHTML = micInner();
+  const b = $('#mic');
+  if (b) { b.classList.toggle('rec', recording); b.innerHTML = micInner(); }
+  const c = $('#chatmic');
+  if (c) { c.classList.toggle('rec', recording); c.innerHTML = recording ? ic('stop', 'fill') : ic('mic'); }
 }
 
 /* ========== Vykreslování ========== */
@@ -316,16 +322,6 @@ const views = {
       </div>` : ''}`;
   },
 
-  ask() {
-    return `<h1>Zeptat se</h1>
-      <p class="small">Zeptejte se na cokoli ze svých zápisků, např. „Co jsem vymýšlel k eshopu?“ nebo „Jaké nápady jsem měl minulý týden?“</p>
-      <div class="composer">
-        <textarea id="askq" placeholder="Vaše otázka…" style="min-height:90px">${esc(ask.q)}</textarea>
-      </div>
-      <button class="btn" data-act="doask" ${ask.busy ? 'disabled' : ''}>${ask.busy ? ic('loader', 'spin') + 'Přemýšlím…' : ic('sparkles') + 'Zeptat se'}</button>
-      ${ask.a ? `<div class="answer">${ic('sparkles')}<div>${esc(ask.a)}</div></div>` : ''}`;
-  },
-
   settings() {
     return `<h1>Nastavení</h1>
       <div class="group">
@@ -355,8 +351,11 @@ function render() {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === navView));
   const main = $('#main');
   const scroll = main.scrollTop;
+  const chatView = view === 'chat';
+  main.classList.toggle('chatview', chatView);
   main.innerHTML = views[view]();
-  main.scrollTop = scroll;
+  main.scrollTop = chatView ? main.scrollHeight : scroll;
+  if (chatView) { const q = $('#chatq'); if (q) autosize(q); }
 }
 
 /* ========== Akce ========== */
@@ -449,22 +448,6 @@ const actions = {
       });
     } catch (e) { projAnswers[p.id] = 'Chyba: ' + e.message; }
     busyProj[p.id] = false; render();
-  },
-
-  async doask() {
-    ask.q = ($('#askq').value || '').trim();
-    if (!ask.q) return;
-    if (!S.ideas.length) { ask.a = 'Zatím nemáte žádné zápisky.'; render(); return; }
-    ask.busy = true; ask.a = ''; render();
-    const notes = S.ideas.filter(i => i.text).slice(0, 300)
-      .map(i => `[${fmt(i.created)}] [${projName(i.projectId) || 'Nezařazeno'}] ${i.text.slice(0, 400)}${checkText(i)}`).join('\n');
-    try {
-      ask.a = await gemini({
-        system: 'Odpovídáš česky, stručně a jednoduše (člověk má krátkou paměť). Vycházej pouze z poskytnutých zápisků. Pokud odpověď v zápiscích není, řekni to. Dnes je ' + new Date().toLocaleDateString('cs-CZ') + '.',
-        parts: [{ text: `Zápisky (od nejnovějšího):\n${notes}\n\nOtázka: ${ask.q}` }]
-      });
-    } catch (e) { ask.a = 'Chyba: ' + e.message; }
-    ask.busy = false; render();
   },
 
   savesettings() {
