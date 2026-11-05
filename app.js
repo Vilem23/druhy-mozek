@@ -35,12 +35,48 @@ const showOrig = new Set();    // id nápadů, u kterých je teď vidět původn
 let testRes = null;            // výsledek "Otestovat spojení" v Nastavení
 const audioStore = new Map();   // id nápadu -> nahrávka (jen v paměti, pro opakování)
 
-function toast(msg) {
+function toast(msg, undoable) {
   const t = $('#toast');
-  t.textContent = msg;
+  if (undoable) t.innerHTML = `<span>${esc(msg)}</span><button data-act="undo">Vrátit</button>`;
+  else t.textContent = msg;
+  t.classList.toggle('act', !!undoable);
   t.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+  toast._t = setTimeout(() => t.classList.remove('show'), undoable ? 7000 : 2600);
+}
+
+/* ========== Vrácení kroku ==========
+   Před každou změnou dat (mazání, přesun, úprava projektu, zásah AI…) se uloží kopie dat.
+   Vrátit jde až posledních 10 kroků, od nejnovějšího. */
+const LS_UNDO = 'napady.undo';
+let undoStack = [];
+try { undoStack = JSON.parse(localStorage.getItem(LS_UNDO)) || []; } catch (e) { /* prázdné */ }
+if (!Array.isArray(undoStack)) undoStack = [];
+function saveUndo() {
+  for (;;) {
+    try { localStorage.setItem(LS_UNDO, JSON.stringify(undoStack)); return; }
+    catch (e) { if (undoStack.length <= 1) return; undoStack.shift(); }   // plné úložiště: zahodit nejstarší
+  }
+}
+function checkpoint(label, data) {
+  const e = { id: uid(), label, at: Date.now(), data: data || JSON.stringify({ projects: S.projects, ideas: S.ideas }) };
+  undoStack.push(e);
+  if (undoStack.length > 10) undoStack.shift();
+  saveUndo();
+  return e;
+}
+function undoLast() {
+  const e = undoStack.pop();
+  if (!e) { toast('Není co vracet.'); return; }
+  try {
+    const d = JSON.parse(e.data);
+    if (!Array.isArray(d.ideas) || !Array.isArray(d.projects)) throw new Error();
+    S.projects = d.projects; S.ideas = d.ideas; save();
+  } catch (err) { toast('Vrácení se nepovedlo.'); return; }
+  saveUndo();
+  if (typeof chat !== 'undefined') { chat.msgs.forEach(m => { if (m.undoId === e.id) m.undone = true; }); saveChat(); }
+  render();
+  toast('Vráceno: ' + e.label);
 }
 
 /* ========== Gemini ========== */
@@ -342,6 +378,13 @@ const views = {
         <button class="btn ghost" data-act="import">${ic('upload')}Obnovit ze zálohy</button>
         <input id="file" type="file" accept="application/json,.json" hidden>
       </div>
+      <h2>Vrátit krok</h2>
+      <div class="group">
+        <small>${undoStack.length
+          ? `Poslední krok: <b>${esc(undoStack[undoStack.length - 1].label)}</b> (${fmt(undoStack[undoStack.length - 1].at)}). Před každou změnou se stav uloží, vrátit jde až posledních 10 kroků.`
+          : 'Zatím není co vracet. Před každou změnou (mazání, přesun, zásah AI…) se stav uloží a půjde vrátit.'}</small>
+        <button class="btn ghost" data-act="undo" ${undoStack.length ? '' : 'disabled'}>${ic('retry')}Vrátit poslední krok</button>
+      </div>
       <p class="stats"><span>Nápadů: ${S.ideas.length}</span><span>·</span><span>Projektů: ${S.projects.length}</span></p>`;
   }
 };
@@ -370,39 +413,44 @@ const actions = {
     const name = (prompt('Název projektu:') || '').trim();
     if (!name) return;
     const desc = (prompt('Krátký popis (pomáhá AI poznat, co do projektu patří). Můžete nechat prázdné:') || '').trim();
+    checkpoint('Nový projekt');
     S.projects.push({ id: uid(), name, desc });
-    save(); render(); toast('Projekt založen');
+    save(); render(); toast('Projekt založen', true);
   },
   editproj() {
     const p = S.projects.find(p => p.id === curProject); if (!p) return;
     const name = (prompt('Název projektu:', p.name) || '').trim();
     if (!name) return;
     const desc = prompt('Popis projektu:', p.desc || '');
+    checkpoint('Upraven projekt');
     p.name = name; if (desc !== null) p.desc = desc.trim();
     save(); render();
   },
   delproj() {
     const p = S.projects.find(p => p.id === curProject); if (!p) return;
-    if (!confirm(`Smazat projekt „${p.name}“? Nápady zůstanou jako Nezařazeno.`)) return;
+    checkpoint('Smazán projekt');
     S.ideas.forEach(i => { if (i.projectId === p.id) i.projectId = ''; });
     S.projects = S.projects.filter(x => x.id !== p.id);
-    save(); view = 'projects'; render();
+    save(); view = 'projects'; render(); toast('Projekt smazán, nápady jsou v Nezařazeno', true);
   },
   mkproj(el) {
     const idea = S.ideas.find(i => i.id === el.dataset.id); if (!idea) return;
     const name = (prompt('Název nového projektu:', idea.suggest) || '').trim();
     if (!name) return;
     const p = { id: uid(), name, desc: '' };
+    checkpoint('Nový projekt');
     S.projects.push(p);
     idea.projectId = p.id; idea.suggest = '';
-    save(); render(); toast('Projekt založen');
+    save(); render(); toast('Projekt založen', true);
   },
   del(el) {
-    if (!confirm('Opravdu smazat tento nápad?')) return;
+    if (!S.ideas.some(i => i.id === el.dataset.id)) return;
+    checkpoint('Smazán nápad');
     S.ideas = S.ideas.filter(i => i.id !== el.dataset.id);
     audioStore.delete(el.dataset.id);
-    save(); render();
+    save(); render(); toast('Nápad smazán', true);
   },
+  undo() { undoLast(); },
   retry(el) { enrich(el.dataset.id); },
   tick(el) {
     const idea = S.ideas.find(i => i.id === el.dataset.id);
@@ -412,8 +460,8 @@ const actions = {
   },
   delcheck(el) {
     const idea = S.ideas.find(i => i.id === el.dataset.id); if (!idea) return;
-    if (!confirm('Odebrat checklist z tohoto nápadu?')) return;
-    delete idea.checklist; save(); render();
+    checkpoint('Odebrán checklist');
+    delete idea.checklist; save(); render(); toast('Checklist odebrán', true);
   },
   async mkcheck(el) {
     const idea = S.ideas.find(i => i.id === el.dataset.id); if (!idea) return;
@@ -425,7 +473,7 @@ const actions = {
         schema: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['items'] }
       });
       const items = toChecklist(out.items);
-      if (items.length) idea.checklist = items; else toast('AI žádné položky nenašla.');
+      if (items.length) { checkpoint('Vytvořen checklist'); idea.checklist = items; } else toast('AI žádné položky nenašla.');
       save();
     } catch (e) { toast(e.message.slice(0, 120)); }
     busyCheck.delete(idea.id); render();
@@ -507,7 +555,7 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset && el.dataset.act === 'mv') {
     const idea = S.ideas.find(i => i.id === el.dataset.id);
-    if (idea) { idea.projectId = el.value; idea.suggest = ''; save(); render(); }
+    if (idea) { checkpoint('Přesunut nápad'); idea.projectId = el.value; idea.suggest = ''; save(); render(); toast('Nápad přesunut', true); }
   }
   if (el.id === 'file' && el.files[0]) {
     el.files[0].text().then(t => {
@@ -515,7 +563,8 @@ document.addEventListener('change', e => {
         const d = JSON.parse(t);
         if (!Array.isArray(d.ideas) || !Array.isArray(d.projects)) throw new Error();
         if (!confirm(`Obnovit ze zálohy (${d.ideas.length} nápadů, ${d.projects.length} projektů)? Současná data budou nahrazena.`)) return;
-        S.ideas = d.ideas; S.projects = d.projects; save(); render(); toast('Obnoveno');
+        checkpoint('Obnovení ze zálohy');
+        S.ideas = d.ideas; S.projects = d.projects; save(); render(); toast('Obnoveno', true);
       } catch (err) { toast('Soubor zálohy není platný.'); }
     });
   }

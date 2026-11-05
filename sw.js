@@ -1,5 +1,5 @@
 // Service worker: appka se otevře i offline. Volání AI (jiná doména) se nikdy necachuje.
-const CACHE = 'napady-v10';
+const CACHE = 'napady-v11';
 const FILES = ['./', 'index.html', 'app.js', 'chat.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

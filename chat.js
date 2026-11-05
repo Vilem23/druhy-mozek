@@ -2,9 +2,8 @@
 
 /* ========== AI chat ==========
    Odpovídá na cokoli a přes nástroje (function calling) umí upravovat nápady, projekty a checklisty.
-   Před každou změnou se uloží kopie dat (LS_UNDO), aby šlo tlačítkem „Vrátit změny“ vrátit poslední zásah. */
+   Před každým zásahem se přes checkpoint() uloží kopie dat, aby šlo tlačítkem „Vrátit změny“ zásah vrátit. */
 const LS_CHAT = 'napady.chat';
-const LS_UNDO = 'napady.undo';
 const chat = { msgs: [], draft: '', busy: false, label: '' };
 try { chat.msgs = JSON.parse(localStorage.getItem(LS_CHAT)) || []; } catch (e) { /* prázdná konverzace */ }
 if (!Array.isArray(chat.msgs)) chat.msgs = [];
@@ -273,8 +272,9 @@ async function sendChat(text, blob) {
     chat.msgs.push({ r: 'm', t: 'Chyba: ' + e.message, err: true, log });
   }
   if (log.length) {
-    chat.msgs[chat.msgs.length - 1].changed = true;
-    try { localStorage.setItem(LS_UNDO, before); } catch (e) { /* bez možnosti vrácení */ }
+    const last = chat.msgs[chat.msgs.length - 1];
+    last.changed = true;
+    last.undoId = checkpoint('Zásah AI chatu', before).id;
     save();
   }
   chat.busy = false;
@@ -297,8 +297,9 @@ views.chat = () => {
     if (m.r === 'u') return `<div class="b user">${esc(m.t)}</div>`;
     const log = (m.log || []).length
       ? `<div class="log">${m.log.map(l => `<div>${ic(LOG_ICON[l.k] || 'check')}<span>${esc(l.t)}</span></div>`).join('')}</div>` : '';
-    const undo = n === lastIdx && m.changed && !m.undone && localStorage.getItem(LS_UNDO)
-      ? `<button class="btn small ghost" data-act="undochat">${ic('retry')}Vrátit změny</button>` : '';
+    const top = undoStack[undoStack.length - 1];
+    const undo = n === lastIdx && m.changed && !m.undone && top && top.id === m.undoId
+      ? `<button class="btn small ghost" data-act="undo">${ic('retry')}Vrátit změny</button>` : '';
     return `<div class="b ai ${m.err ? 'err' : ''}">${esc(m.t)}${log}${undo}</div>`;
   }).join('');
   const empty = chat.msgs.length ? '' : `<div class="empty">${ic('sparkles')}
@@ -329,18 +330,7 @@ Object.assign(actions, {
   chatnew() {
     if (!confirm('Začít novou konverzaci? Změny, které AI provedla v nápadech, zůstanou.')) return;
     chat.msgs = []; chat.draft = '';
-    localStorage.removeItem(LS_UNDO); saveChat(); render();
-  },
-  undochat() {
-    try {
-      const d = JSON.parse(localStorage.getItem(LS_UNDO));
-      if (!Array.isArray(d.ideas) || !Array.isArray(d.projects)) throw new Error();
-      S.projects = d.projects; S.ideas = d.ideas; save();
-    } catch (e) { toast('Změny se nepodařilo vrátit.'); return; }
-    const last = [...chat.msgs].reverse().find(m => m.changed);
-    if (last) last.undone = true;
-    localStorage.removeItem(LS_UNDO);
-    saveChat(); render(); toast('Změny vráceny');
+    saveChat(); render();
   }
 });
 
